@@ -8,23 +8,47 @@ from datetime import datetime
 DATA_FILE = 'diet_data.csv'
 IMAGE_DIR = 'images'
 
-# 確保圖片資料夾存在
 if not os.path.exists(IMAGE_DIR):
     os.makedirs(IMAGE_DIR)
 
 # --- 頁面設定 ---
 st.set_page_config(page_title="🍰飲食日記🧋", page_icon="🍯", layout="centered")
 
-# --- 樣式設定 ---
+# --- 樣式設定 (針對手機強制修正) ---
 st.markdown("""
     <style>
+    /* 全域背景與文字顏色 */
     .stApp { background-color: #FFFDF5; }
-    h1, h2, h3, h4, .stMarkdown, p, span, div { 
+    h1, h2, h3, h4, .stMarkdown, p, span, div, label { 
         color: #5D4037 !important; 
     }
-    label {
+    
+    /* 統計數字顏色 (讓它顯眼一點) */
+    div[data-testid="stMetricValue"] {
+        color: #D84315 !important;
+        font-weight: bold;
+    }
+    div[data-testid="stMetricLabel"] {
         color: #5D4037 !important;
     }
+    
+    /* [手機版核心修正] 強制欄位不堆疊，保持橫向排列 */
+    @media (max-width: 768px) {
+        div[data-testid="stColumn"] {
+            width: auto !important;
+            flex: 1 1 auto !important;
+            min-width: 1px !important;
+            padding: 0 2px !important;
+        }
+        /* 手機上按鈕字體縮小 */
+        .stButton button {
+            font-size: 12px !important; 
+            padding: 0px !important;
+            height: 35px !important;
+        }
+    }
+
+    /* 按鈕樣式 (圓形) */
     .stButton button {
         background-color: #FFECB3;
         color: #5D4037 !important;
@@ -33,19 +57,18 @@ st.markdown("""
         width: 100%;
         aspect-ratio: 1 / 1;
         font-weight: bold;
-        padding: 0;
         margin: 0 auto;
         display: flex;
         align-items: center;
         justify-content: center;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
     .stButton button:hover {
         background-color: #FFD54F;
         border-color: #FFCA28;
     }
-    div[data-testid="stColumn"] {
-        text-align: center;
-    }
+
+    /* 圖片圓角 */
     img { border-radius: 15px; }
     </style>
 """, unsafe_allow_html=True)
@@ -100,6 +123,7 @@ if st.session_state.selected_date:
         if not df.empty:
             day_records = df[df['日期'].dt.date == sel_date.date()]
             for idx, row in day_records.iterrows():
+                # 這裡使用 columns 也不會跑版，因為上面 CSS 強制橫排了
                 c1, c2, c3 = st.columns([3, 2, 1])
                 with c1: st.write(f"🍽️ {row['項目']}")
                 with c2: st.write(f"💰 {row['價格']}")
@@ -116,68 +140,4 @@ if st.session_state.selected_date:
             with c2: price = st.number_input("價格", step=1)
             file = st.file_uploader("照片 (選填)", type=['jpg','png', 'jpeg'])
             
-            if st.form_submit_button("✅ 儲存"):
-                if item:
-                    save_data_entry(sel_date, item, price, file)
-                    st.success("已儲存！")
-                    st.rerun()
-                else:
-                    st.warning("請輸入項目名稱")
-    
-    if st.button("❌ 關閉編輯"):
-        st.session_state.selected_date = None
-        st.rerun()
-
-st.divider()
-
-# 2. 日曆篩選區
-col_y, col_m = st.columns(2)
-now = datetime.now()
-with col_y: y = st.selectbox("年份", range(now.year-2, now.year+3), index=2)
-with col_m: m = st.selectbox("月份", range(1, 13), index=now.month-1)
-
-df = load_data()
-daily_sum = pd.Series(dtype='float64')
-
-if not df.empty:
-    df['Y'] = df['日期'].dt.year
-    df['M'] = df['日期'].dt.month
-    month_data = df[(df['Y'] == y) & (df['M'] == m)]
-    daily_sum = month_data.groupby(df['日期'].dt.day)['價格'].sum()
-
-# 3. 日曆顯示 (7欄)
-st.write("#### 📅 點擊日期來紀錄")
-cols = st.columns(7) 
-days = calendar.monthrange(y, m)[1]
-
-for d in range(1, days+1):
-    spent = daily_sum.get(d, 0)
-    label = f"{d}\n${int(spent)}" if spent > 0 else f"{d}"
-    
-    with cols[(d-1)%7]:
-        if st.button(label, key=f"cal_btn_{d}"):
-            st.session_state.selected_date = datetime(y, m, d)
-            st.rerun()
-
-st.divider()
-
-# 4. 相簿功能
-st.subheader("📸 飲食相簿")
-
-# 這裡就是容易出錯的地方，我已經確保縮排正確
-if not df.empty:
-    gallery_df = df[df['圖片路徑'].notna()]
-    gallery_df = gallery_df[(gallery_df['Y'] == y) & (gallery_df['M'] == m)]
-    
-    if not gallery_df.empty:
-        img_cols = st.columns(3)
-        for i, (idx, row) in enumerate(gallery_df.iterrows()):
-            img_path = os.path.join(IMAGE_DIR, row['圖片路徑'])
-            if os.path.exists(img_path):
-                with img_cols[i % 3]:
-                    st.image(img_path, use_container_width=True)
-                    st.caption(f"{row['日期'].strftime('%m/%d')} - {row['項目']}")
-    else:
-        st.info("這個月份還沒有上傳照片喔！")
-else:
-    st.info("目前沒有任何紀錄。")
+            if st.form_submit_button("
