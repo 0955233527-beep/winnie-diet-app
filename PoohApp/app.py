@@ -12,7 +12,7 @@ if not os.path.exists(IMAGE_DIR):
     os.makedirs(IMAGE_DIR)
 
 # --- 頁面設定 ---
-st.set_page_config(page_title="維尼飲食日記", page_icon="🍯", layout="centered")
+st.set_page_config(page_title="🍰飲食日記🧋", page_icon="🍯", layout="centered")
 
 st.markdown("""
     <style>
@@ -150,3 +150,4 @@ if not month_data.empty:
                     ic[i%3].image(p, caption=f"{r['日期'].strftime('%m/%d')} {r['項目']}")
     else: st.info("無照片")
 else: st.info("無資料")
+
