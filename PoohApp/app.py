@@ -83,7 +83,18 @@ if 'selected_date' not in st.session_state:
     st.session_state.selected_date = None
 
 st.title("🍰飲食日記🧋 (雲端版)")
-
+# --- 診斷程式碼 (測試完後可以刪除) ---
+st.write("🔍 正在診斷連線...")
+try:
+    test_sheet = get_google_sheet()
+    if test_sheet:
+        st.success(f"✅ 成功連線到試算表！")
+        st.write("目前資料：", test_sheet.get_all_records())
+    else:
+        st.error("❌ 無法找到試算表，請檢查檔名是否為 'diet_data'，且機器人已加入共用。")
+except Exception as e:
+    st.error(f"❌ 連線發生錯誤 (請截圖給工程師)：{e}")
+# -----------------------------------
 # 1. 編輯區塊
 if st.session_state.selected_date:
     sel_date = st.session_state.selected_date
@@ -164,3 +175,4 @@ for week in month_weeks:
                     st.rerun()
             else:
                 st.write("")
+
