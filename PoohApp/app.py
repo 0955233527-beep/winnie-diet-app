@@ -79,7 +79,7 @@ def delete_entry(index):
 if 'selected_date' not in st.session_state:
     st.session_state.selected_date = None
 
-st.title("📅 維尼飲食紀錄")
+st.title("🍰飲食日記🧋")
 
 if st.session_state.selected_date:
     sel_date = st.session_state.selected_date
@@ -150,4 +150,5 @@ if not month_data.empty:
                     ic[i%3].image(p, caption=f"{r['日期'].strftime('%m/%d')} {r['項目']}")
     else: st.info("無照片")
 else: st.info("無資料")
+
 
