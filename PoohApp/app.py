@@ -167,3 +167,17 @@ st.subheader("📸 飲食相簿")
 # 這裡就是容易出錯的地方，我已經確保縮排正確
 if not df.empty:
     gallery_df = df[df['圖片路徑'].notna()]
+    gallery_df = gallery_df[(gallery_df['Y'] == y) & (gallery_df['M'] == m)]
+    
+    if not gallery_df.empty:
+        img_cols = st.columns(3)
+        for i, (idx, row) in enumerate(gallery_df.iterrows()):
+            img_path = os.path.join(IMAGE_DIR, row['圖片路徑'])
+            if os.path.exists(img_path):
+                with img_cols[i % 3]:
+                    st.image(img_path, use_container_width=True)
+                    st.caption(f"{row['日期'].strftime('%m/%d')} - {row['項目']}")
+    else:
+        st.info("這個月份還沒有上傳照片喔！")
+else:
+    st.info("目前沒有任何紀錄。")
