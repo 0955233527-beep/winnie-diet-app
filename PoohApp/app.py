@@ -21,13 +21,16 @@ st.markdown("""
     /* 設定背景色 */
     .stApp { background-color: #FFFDF5; }
     
-    /* 強制設定標題文字顏色為深咖啡色 (解決手機版看不到字的問題) */
-    h1 { color: #5D4037; }
+    /* [超級修正] 強制所有標題 (H1, H2, H3) 與文字都變成深咖啡色 */
+    /* !important 表示「最優先」，無視手機的深色模式設定 */
+    h1, h2, h3, h4, .stMarkdown p { 
+        color: #5D4037 !important; 
+    }
 
     /* 按鈕樣式 */
     .stButton button {
         background-color: #FFECB3;
-        color: #5D4037;
+        color: #5D4037 !important; /* 按鈕文字也強制深色 */
         border: 2px solid #FFE082;
         aspect-ratio: 1 / 1;
         border-radius: 24px; 
@@ -45,7 +48,8 @@ st.markdown("""
         height: auto !important;
         padding: 0.2rem 0.5rem;
     }
-    div[data-testid="stMetricValue"] { color: #D84315; }
+    /* 統計數字顏色 */
+    div[data-testid="stMetricValue"] { color: #D84315 !important; }
     img { border-radius: 15px; }
     </style>
 """, unsafe_allow_html=True)
@@ -76,10 +80,7 @@ def save_data_entry(date_obj, item, price, uploaded_file):
         '圖片路徑': [filename]
     })
     
-    # 判斷是否需要寫入標題 (如果檔案不存在就需要)
     header = not os.path.exists(DATA_FILE)
-    
-    # 寫入 CSV (這裡修復了原本的括號錯誤)
     new_row.to_csv(DATA_FILE, mode='a', header=header, index=False)
 
 def delete_entry(index):
@@ -88,14 +89,11 @@ def delete_entry(index):
     df.to_csv(DATA_FILE, index=False)
 
 # --- 主程式邏輯 ---
-
-# 初始化 Session State
 if 'selected_date' not in st.session_state:
     st.session_state.selected_date = None
 
 st.title("🍰飲食日記🧋")
 
-# 顯示編輯區塊 (如果有選日期的話)
 if st.session_state.selected_date:
     sel_date = st.session_state.selected_date
     st.info(f"編輯：{sel_date.strftime('%Y/%m/%d')}")
@@ -131,7 +129,6 @@ if st.session_state.selected_date:
 
 st.divider()
 
-# 日曆與統計區塊
 col_y, col_m = st.columns(2)
 now = datetime.now()
 with col_y: y = st.selectbox("年", range(now.year-2, now.year+3), index=2)
@@ -165,11 +162,3 @@ st.subheader("📸 本月相簿")
 if not month_data.empty:
     photos = month_data[month_data['圖片路徑'].notna()].sort_values(by='日期', ascending=False)
     if not photos.empty:
-        with st.expander(f"看照片 ({len(photos)})", expanded=True):
-            ic = st.columns(3)
-            for i, (_, r) in enumerate(photos.iterrows()):
-                p = os.path.join(IMAGE_DIR, r['圖片路徑'])
-                if os.path.exists(p):
-                    ic[i%3].image(p, caption=f"{r['日期'].strftime('%m/%d')} {r['項目']}")
-    else: st.info("本月無照片")
-else: st.info("本月無資料")
