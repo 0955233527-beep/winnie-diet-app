@@ -150,11 +150,13 @@ if not df.empty:
 cols = st.columns(4)
 days = calendar.monthrange(y, m)[1]
 
+# --- 修正後的日曆迴圈 ---
 for d in range(1, days+1):
     spent = daily_sum.get(d, 0)
     label = f"{d}\n\n${int(spent)}" if spent > 0 else f"{d}"
     
     with cols[(d-1)%4]:
-# 如果你的迴圈變數是 i
-if st.button(label, key=f"b_{i}"):
-
+        # 這裡修正了縮排，並使用變數 d 作為 key
+        if st.button(label, key=f"cal_btn_{d}"):
+            st.session_state.selected_date = datetime(y, m, d)
+            st.rerun()
