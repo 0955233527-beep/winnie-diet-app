@@ -40,13 +40,17 @@ st.markdown("""
 def get_google_sheet():
     try:
         scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+        # 確保 Secrets 存在
+        if "gcp_service_account" not in st.secrets:
+            st.error("❌ Secrets 未設定！請至 Streamlit Cloud 設定 Secrets。")
+            return None
         creds_dict = dict(st.secrets["gcp_service_account"])
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         client = gspread.authorize(creds)
         sheet = client.open(SPREADSHEET_NAME).sheet1
         return sheet
     except Exception as e:
-        st.error(f"⚠️ 連線失敗原因：{e}")
+        st.error(f"⚠️ 連線錯誤：{e}")
         return None
 
 # --- 功能函數 ---
@@ -67,14 +71,18 @@ def save_data_entry(date_obj, item, price, uploaded_file):
     if sheet:
         filename = ""
         if uploaded_file:
+            # 建立圖片檔名並儲存
             filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
             with open(os.path.join(IMAGE_DIR, filename), "wb") as f:
                 f.write(uploaded_file.getbuffer())
+        
+        # 寫入 Google 試算表
         sheet.append_row([str(date_obj.date()), item, price, filename])
 
 def delete_entry(index):
     sheet = get_google_sheet()
     if sheet:
+        # 索引補正：標題行(1) + 索引(0起算) = index + 2
         sheet.delete_rows(index + 2)
 
 # --- 主程式 ---
@@ -150,6 +158,7 @@ st.divider()
 # 4. 📸 相簿功能
 st.subheader("📸 飲食相簿")
 if not df.empty and '圖片路徑' in df.columns:
+    # 找出有填寫圖片路徑的紀錄
     gallery_df = df[df['圖片路徑'].astype(str).str.len() > 5]
     if not gallery_df.empty:
         img_cols = st.columns(3)
@@ -159,3 +168,5 @@ if not df.empty and '圖片路徑' in df.columns:
                 with img_cols[i % 3]:
                     st.image(img_path)
                     st.caption(f"{row['日期'].strftime('%m/%d')} - {row['項目']}")
+    else:
+        st.info("目前尚無照片紀錄")
