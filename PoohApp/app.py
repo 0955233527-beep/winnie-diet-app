@@ -10,6 +10,7 @@ import os
 SPREADSHEET_NAME = 'diet_data' 
 IMAGE_DIR = 'images'
 
+# 確保圖片資料夾存在
 if not os.path.exists(IMAGE_DIR):
     os.makedirs(IMAGE_DIR)
 
@@ -40,9 +41,9 @@ st.markdown("""
 def get_google_sheet():
     try:
         scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-        # 確保 Secrets 存在
+        # 檢查 Secrets
         if "gcp_service_account" not in st.secrets:
-            st.error("❌ Secrets 未設定！請至 Streamlit Cloud 設定 Secrets。")
+            st.error("❌ Secrets 設定缺失，請在 Streamlit Cloud 設定 Secret")
             return None
         creds_dict = dict(st.secrets["gcp_service_account"])
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
@@ -50,7 +51,7 @@ def get_google_sheet():
         sheet = client.open(SPREADSHEET_NAME).sheet1
         return sheet
     except Exception as e:
-        st.error(f"⚠️ 連線錯誤：{e}")
+        st.error(f"⚠️ 連線失敗：{e}")
         return None
 
 # --- 功能函數 ---
@@ -71,18 +72,18 @@ def save_data_entry(date_obj, item, price, uploaded_file):
     if sheet:
         filename = ""
         if uploaded_file:
-            # 建立圖片檔名並儲存
+            # 圖片存入本機 images/ 資料夾
             filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
             with open(os.path.join(IMAGE_DIR, filename), "wb") as f:
                 f.write(uploaded_file.getbuffer())
         
-        # 寫入 Google 試算表
+        # 存入試算表 A, B, C, D 欄
         sheet.append_row([str(date_obj.date()), item, price, filename])
 
 def delete_entry(index):
     sheet = get_google_sheet()
     if sheet:
-        # 索引補正：標題行(1) + 索引(0起算) = index + 2
+        # 標題佔 1 行，Excel 索引從 1 起算，故 +2
         sheet.delete_rows(index + 2)
 
 # --- 主程式 ---
@@ -107,15 +108,18 @@ if st.session_state.selected_date:
                     if st.button("刪", key=f"del_{row['index']}"):
                         delete_entry(row['index'])
                         st.rerun()
+        
+        st.write("---")
         with st.form("add"):
             item = st.text_input("項目")
             price = st.number_input("價格", step=1)
-            file = st.file_uploader("上傳照片", type=['jpg','png','jpeg'])
+            file = st.file_uploader("📷 上傳照片", type=['jpg','png','jpeg'])
             if st.form_submit_button("✅ 儲存"):
                 if item:
                     save_data_entry(sel_date, item, price, file)
                     st.success("成功！")
                     st.rerun()
+    
     if st.button("❌ 關閉編輯"):
         st.session_state.selected_date = None
         st.rerun()
@@ -131,12 +135,13 @@ with col_m: m = st.selectbox("月份", range(1, 13), index=now.month-1)
 df = load_data()
 daily_sum = pd.Series(dtype='float64')
 month_total = 0
-if not df.empty and '價格' in df.columns:
+if not df.empty:
     df['Y'] = df['日期'].dt.year
     df['M'] = df['日期'].dt.month
     month_data = df[(df['Y'] == y) & (df['M'] == m)]
-    daily_sum = month_data.groupby(df['日期'].dt.day)['價格'].sum()
-    month_total = month_data['價格'].sum()
+    if not month_data.empty:
+        daily_sum = month_data.groupby(df['日期'].dt.day)['價格'].sum()
+        month_total = month_data['價格'].sum()
 
 st.metric("💰 本月總支出", f"${int(month_total)}")
 
@@ -155,10 +160,9 @@ for week in weeks:
 
 st.divider()
 
-# 4. 📸 相簿功能
+# 4. 📸 相簿功能回歸
 st.subheader("📸 飲食相簿")
 if not df.empty and '圖片路徑' in df.columns:
-    # 找出有填寫圖片路徑的紀錄
     gallery_df = df[df['圖片路徑'].astype(str).str.len() > 5]
     if not gallery_df.empty:
         img_cols = st.columns(3)
@@ -169,4 +173,4 @@ if not df.empty and '圖片路徑' in df.columns:
                     st.image(img_path)
                     st.caption(f"{row['日期'].strftime('%m/%d')} - {row['項目']}")
     else:
-        st.info("目前尚無照片紀錄")
+        st.info("尚無照片紀錄")
