@@ -21,8 +21,8 @@ st.markdown("""
     /* 設定背景色 */
     .stApp { background-color: #FFFDF5; }
     
-    /* [超級修正] 強制所有標題與文字變色，加上 !important 防止被手機深色模式蓋過 */
-    h1, h2, h3, h4, .stMarkdown, p { 
+    /* 強制所有標題與文字變色 */
+    h1, h2, h3, h4, .stMarkdown, p, span, div { 
         color: #5D4037 !important; 
     }
     
@@ -31,28 +31,32 @@ st.markdown("""
         color: #5D4037 !important;
     }
 
-    /* 按鈕樣式 */
+    /* 日曆按鈕樣式 */
     .stButton button {
         background-color: #FFECB3;
         color: #5D4037 !important;
         border: 2px solid #FFE082;
-        aspect-ratio: 1 / 1;
-        border-radius: 24px; 
+        border-radius: 50%; /* 圓形 */
         width: 100%;
+        aspect-ratio: 1 / 1; /* 保持正圓 */
         font-weight: bold;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        padding: 0;
+        margin: 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
     .stButton button:hover {
         background-color: #FFD54F;
         border-color: #FFCA28;
-        transform: translateY(-2px);
     }
-    div[data-testid="stColumn"] button {
-        aspect-ratio: auto;
-        height: auto !important;
-        padding: 0.2rem 0.5rem;
+
+    /* 針對手機優化：避免按鈕被拉伸 */
+    div[data-testid="stColumn"] {
+        text-align: center;
     }
-    div[data-testid="stMetricValue"] { color: #D84315 !important; }
+    
+    /* 圖片圓角 */
     img { border-radius: 15px; }
     </style>
 """, unsafe_allow_html=True)
@@ -97,9 +101,10 @@ if 'selected_date' not in st.session_state:
 
 st.title("🍰飲食日記🧋")
 
+# 1. 編輯區塊 (如果有選日期的話)
 if st.session_state.selected_date:
     sel_date = st.session_state.selected_date
-    st.info(f"編輯：{sel_date.strftime('%Y/%m/%d')}")
+    st.info(f"正在編輯：{sel_date.strftime('%Y/%m/%d')}")
     
     with st.container(border=True):
         df = load_data()
@@ -110,36 +115,41 @@ if st.session_state.selected_date:
                 with c1: st.write(f"🍽️ {row['項目']}")
                 with c2: st.write(f"💰 {row['價格']}")
                 with c3: 
-                    if st.button("刪", key=f"d_{idx}"):
+                    # 使用唯一的 key 防止重複錯誤
+                    if st.button("刪", key=f"del_{idx}"):
                         delete_entry(idx)
                         st.rerun()
         
-        with st.form("add"):
+        st.write("---")
+        st.write("📝 **新增紀錄**")
+        with st.form("add_form"):
             c1, c2 = st.columns(2)
             with c1: item = st.text_input("項目")
             with c2: price = st.number_input("價格", step=1)
-            file = st.file_uploader("照片", type=['jpg','png'])
+            file = st.file_uploader("照片 (選填)", type=['jpg','png', 'jpeg'])
             
             if st.form_submit_button("✅ 儲存"):
                 if item:
                     save_data_entry(sel_date, item, price, file)
-                    st.success("已儲存")
+                    st.success("已儲存！")
                     st.rerun()
+                else:
+                    st.warning("請輸入項目名稱")
     
-    if st.button("❌ 關閉"):
+    if st.button("❌ 關閉編輯"):
         st.session_state.selected_date = None
         st.rerun()
 
 st.divider()
 
+# 2. 日曆篩選區
 col_y, col_m = st.columns(2)
 now = datetime.now()
-with col_y: y = st.selectbox("年", range(now.year-2, now.year+3), index=2)
-with col_m: m = st.selectbox("月", range(1, 13), index=now.month-1)
+with col_y: y = st.selectbox("年份", range(now.year-2, now.year+3), index=2)
+with col_m: m = st.selectbox("月份", range(1, 13), index=now.month-1)
 
 df = load_data()
 daily_sum = pd.Series(dtype='float64')
-month_data = pd.DataFrame()
 
 if not df.empty:
     df['Y'] = df['日期'].dt.year
@@ -147,16 +157,28 @@ if not df.empty:
     month_data = df[(df['Y'] == y) & (df['M'] == m)]
     daily_sum = month_data.groupby(df['日期'].dt.day)['價格'].sum()
 
-cols = st.columns(4)
+# 3. 日曆顯示 (修正為7欄)
+st.write("#### 📅 點擊日期來紀錄")
+# 改成 7 欄，符合一週七天
+cols = st.columns(7) 
 days = calendar.monthrange(y, m)[1]
 
-# --- 修正後的日曆迴圈 ---
 for d in range(1, days+1):
     spent = daily_sum.get(d, 0)
-    label = f"{d}\n\n${int(spent)}" if spent > 0 else f"{d}"
+    # 如果有花費，顯示金額；沒有則只顯示日期
+    label = f"{d}\n${int(spent)}" if spent > 0 else f"{d}"
     
-    with cols[(d-1)%4]:
-        # 這裡修正了縮排，並使用變數 d 作為 key
+    # 計算這個日期應該在星期幾 (0=週一, 6=週日) 來決定排版位置，或是直接依序排列
+    # 這裡採用簡單依序排列，每7個換一行
+    with cols[(d-1)%7]:
         if st.button(label, key=f"cal_btn_{d}"):
             st.session_state.selected_date = datetime(y, m, d)
             st.rerun()
+
+st.divider()
+
+# 4. 補回相簿功能
+st.subheader("📸 飲食相簿")
+
+if not df.empty:
+    # 篩選出有圖片的
