@@ -36,33 +36,33 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- Google Sheets 連線與診斷 ---
+# --- Google Sheets 連線 ---
 def get_google_sheet():
     try:
         scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-        if "gcp_service_account" not in st.secrets:
-            st.error("❌ Secrets 中找不到 [gcp_service_account] 設定區塊")
-            return None
         creds_dict = dict(st.secrets["gcp_service_account"])
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         client = gspread.authorize(creds)
-        return client.open(SPREADSHEET_NAME).sheet1
+        sheet = client.open(SPREADSHEET_NAME).sheet1
+        
+        # 檢查是否有標題，若無則自動初始化 (橫向)
+        if not sheet.get_all_values():
+            sheet.append_row(['日期', '項目', '價格', '圖片路徑'])
+            
+        return sheet
     except Exception as e:
-        st.error(f"⚠️ Google 連線具體錯誤：{e}") # 這裡會顯示真正的原因
+        st.error(f"⚠️ 連線具體錯誤：{e}")
         return None
 
 # --- 功能函數 ---
 def load_data():
     sheet = get_google_sheet()
     if sheet:
-        try:
-            data = sheet.get_all_records()
-            df = pd.DataFrame(data)
-            if not df.empty and '日期' in df.columns:
-                df['日期'] = pd.to_datetime(df['日期'], errors='coerce')
-                return df
-        except Exception as e:
-            st.warning(f"資料讀取失敗：{e}")
+        data = sheet.get_all_records()
+        df = pd.DataFrame(data)
+        if not df.empty and '日期' in df.columns:
+            df['日期'] = pd.to_datetime(df['日期'], errors='coerce')
+            return df
     return pd.DataFrame(columns=['日期', '項目', '價格', '圖片路徑'])
 
 def save_data_entry(date_obj, item, price, uploaded_file):
@@ -74,12 +74,12 @@ def save_data_entry(date_obj, item, price, uploaded_file):
             with open(os.path.join(IMAGE_DIR, filename), "wb") as f:
                 f.write(uploaded_file.getbuffer())
         
-        # 存入 Google 試算表 (包含圖片檔名)
         sheet.append_row([str(date_obj.date()), item, price, filename])
 
 def delete_entry(index):
     sheet = get_google_sheet()
     if sheet:
+        # 標題佔一行，索引從0開始，所以是 index + 2
         sheet.delete_rows(index + 2)
 
 # --- 主程式 ---
@@ -111,7 +111,7 @@ if st.session_state.selected_date:
             if st.form_submit_button("✅ 儲存"):
                 if item:
                     save_data_entry(sel_date, item, price, file)
-                    st.success("儲存成功！")
+                    st.success("成功！")
                     st.rerun()
     if st.button("❌ 關閉編輯"):
         st.session_state.selected_date = None
@@ -152,16 +152,15 @@ for week in weeks:
 
 st.divider()
 
-# 4. 📸 相簿功能回歸
+# 4. 📸 相簿功能
 st.subheader("📸 飲食相簿")
 if not df.empty and '圖片路徑' in df.columns:
-    gallery_df = df[df['圖片路徑'].str.len() > 0]
+    gallery_df = df[df['圖片路徑'].astype(str).str.len() > 5] # 過濾有檔名的
     if not gallery_df.empty:
         img_cols = st.columns(3)
         for i, (idx, row) in enumerate(gallery_df.iterrows()):
-            img_path = os.path.join(IMAGE_DIR, row['圖片路徑'])
+            img_path = os.path.join(IMAGE_DIR, str(row['圖片路徑']))
             if os.path.exists(img_path):
                 with img_cols[i % 3]:
-                    st.image(img_path, width='stretch')
+                    st.image(img_path, width=None) # 自動適配寬度
                     st.caption(f"{row['日期'].strftime('%m/%d')} - {row['項目']}")
-    else: st.info("目前尚無照片")
