@@ -10,29 +10,51 @@ import os
 SPREADSHEET_NAME = 'diet_data' 
 IMAGE_DIR = 'images'
 
-# 確保圖片資料夾存在
 if not os.path.exists(IMAGE_DIR):
     os.makedirs(IMAGE_DIR)
 
 # --- 頁面設定 ---
 st.set_page_config(page_title="🍰飲食日記🧋", page_icon="🍯", layout="centered")
 
-# --- 樣式設定 (手機版強制並排) ---
+# --- 樣式設定 (優化日曆數字) ---
 st.markdown("""
     <style>
     .stApp { background-color: #FFFDF5; }
     h1, h2, h3, h4, .stMarkdown, p, span, div, label { color: #5D4037 !important; }
     div[data-testid="stMetricValue"] { color: #D84315 !important; font-weight: bold; }
     
-    @media (max-width: 768px) {
-        [data-testid="stHorizontalBlock"] { display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important; }
-        [data-testid="stColumn"] { flex: 1 1 0px !important; min-width: 0px !important; padding: 0 1px !important; }
-        .stButton button { font-size: 10px !important; height: 35px !important; }
+    /* 手機版橫向排列 */
+    [data-testid="stHorizontalBlock"] {
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
     }
+    
+    [data-testid="stColumn"] {
+        flex: 1 1 0px !important;
+        min-width: 0px !important;
+        padding: 0 1px !important;
+    }
+
+    /* 🔥 按鈕樣式優化：讓數字正常顯示 */
     .stButton button {
-        background-color: #FFECB3; color: #5D4037 !important; border: 1px solid #FFE082;
-        border-radius: 8px; width: 100%; aspect-ratio: 1/1; font-weight: bold;
+        background-color: #FFECB3; 
+        color: #5D4037 !important; 
+        border: 1px solid #FFE082;
+        border-radius: 8px; 
+        width: 100%; 
+        aspect-ratio: 1/1; 
+        font-weight: bold;
+        padding: 2px !important; 
+        font-size: 11px !important;
+        line-height: 1.1 !important; /* 縮小行高，讓日期與金額靠攏 */
+        display: flex; 
+        align-items: center; 
+        justify-content: center;
+        white-space: pre-line !important; /* 允許 \n 換行 */
     }
+    .stButton button:hover { background-color: #FFD54F; }
+    
     img { border-radius: 15px; }
     </style>
 """, unsafe_allow_html=True)
@@ -41,17 +63,19 @@ st.markdown("""
 def get_google_sheet():
     try:
         scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-        # 檢查 Secrets
-        if "gcp_service_account" not in st.secrets:
-            st.error("❌ Secrets 設定缺失，請在 Streamlit Cloud 設定 Secret")
+        # 優先讀取雲端 Secrets，若無則讀取本地 (為了開發環境)
+        if "gcp_service_account" in st.secrets:
+            creds_dict = dict(st.secrets["gcp_service_account"])
+        else:
+            st.error("❌ 找不到金鑰設定")
             return None
-        creds_dict = dict(st.secrets["gcp_service_account"])
+            
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         client = gspread.authorize(creds)
         sheet = client.open(SPREADSHEET_NAME).sheet1
         return sheet
     except Exception as e:
-        st.error(f"⚠️ 連線失敗：{e}")
+        st.error(f"⚠️ 連線錯誤：{e}")
         return None
 
 # --- 功能函數 ---
@@ -72,18 +96,14 @@ def save_data_entry(date_obj, item, price, uploaded_file):
     if sheet:
         filename = ""
         if uploaded_file:
-            # 圖片存入本機 images/ 資料夾
             filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
             with open(os.path.join(IMAGE_DIR, filename), "wb") as f:
                 f.write(uploaded_file.getbuffer())
-        
-        # 存入試算表 A, B, C, D 欄
         sheet.append_row([str(date_obj.date()), item, price, filename])
 
 def delete_entry(index):
     sheet = get_google_sheet()
     if sheet:
-        # 標題佔 1 行，Excel 索引從 1 起算，故 +2
         sheet.delete_rows(index + 2)
 
 # --- 主程式 ---
@@ -95,7 +115,7 @@ st.title("🍰飲食日記🧋")
 # 1. 編輯區
 if st.session_state.selected_date:
     sel_date = st.session_state.selected_date
-    st.info(f"📅 編輯日期：{sel_date.strftime('%Y/%m/%d')}")
+    st.info(f"📅 編輯：{sel_date.strftime('%Y/%m/%d')}")
     with st.container(border=True):
         df = load_data()
         if not df.empty:
@@ -108,8 +128,6 @@ if st.session_state.selected_date:
                     if st.button("刪", key=f"del_{row['index']}"):
                         delete_entry(row['index'])
                         st.rerun()
-        
-        st.write("---")
         with st.form("add"):
             item = st.text_input("項目")
             price = st.number_input("價格", step=1)
@@ -117,9 +135,8 @@ if st.session_state.selected_date:
             if st.form_submit_button("✅ 儲存"):
                 if item:
                     save_data_entry(sel_date, item, price, file)
-                    st.success("成功！")
+                    st.success("儲存成功！")
                     st.rerun()
-    
     if st.button("❌ 關閉編輯"):
         st.session_state.selected_date = None
         st.rerun()
@@ -135,7 +152,7 @@ with col_m: m = st.selectbox("月份", range(1, 13), index=now.month-1)
 df = load_data()
 daily_sum = pd.Series(dtype='float64')
 month_total = 0
-if not df.empty:
+if not df.empty and '價格' in df.columns:
     df['Y'] = df['日期'].dt.year
     df['M'] = df['日期'].dt.month
     month_data = df[(df['Y'] == y) & (df['M'] == m)]
@@ -153,6 +170,7 @@ for week in weeks:
         with cols[i]:
             if d != 0:
                 spent = daily_sum.get(d, 0)
+                # 使用 \n 換行，CSS 已經設定好允許換行
                 label = f"{d}\n${int(spent)}" if spent > 0 else f"{d}"
                 if st.button(label, key=f"cal_{y}_{m}_{d}"):
                     st.session_state.selected_date = datetime(y, m, d)
@@ -160,7 +178,7 @@ for week in weeks:
 
 st.divider()
 
-# 4. 📸 相簿功能回歸
+# 4. 相簿
 st.subheader("📸 飲食相簿")
 if not df.empty and '圖片路徑' in df.columns:
     gallery_df = df[df['圖片路徑'].astype(str).str.len() > 5]
@@ -172,5 +190,3 @@ if not df.empty and '圖片路徑' in df.columns:
                 with img_cols[i % 3]:
                     st.image(img_path)
                     st.caption(f"{row['日期'].strftime('%m/%d')} - {row['項目']}")
-    else:
-        st.info("尚無照片紀錄")
