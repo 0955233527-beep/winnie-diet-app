@@ -11,44 +11,54 @@ IMAGE_DIR = 'images'
 if not os.path.exists(IMAGE_DIR):
     os.makedirs(IMAGE_DIR)
 
-# --- 頁面設定 (這行必須在最前面) ---
+# --- 頁面設定 ---
 st.set_page_config(page_title="🍰飲食日記🧋", page_icon="🍯", layout="centered")
 
-# --- 樣式設定 (安全版：不強制覆蓋 div，避免白屏) ---
+# --- 樣式設定 (🔥關鍵修正區) ---
 st.markdown("""
     <style>
-    /* 設定背景色 */
+    /* 全域背景與文字顏色 */
     .stApp { background-color: #FFFDF5; }
-    
-    /* 針對標題和文字設定顏色 (比之前的寫法更安全) */
-    h1, h2, h3, h4, p, label, .stMarkdown { 
+    h1, h2, h3, h4, .stMarkdown, p, span, div, label { 
         color: #5D4037 !important; 
     }
     
-    /* 統計數字特別顏色 */
+    /* 統計數字顏色 */
     div[data-testid="stMetricValue"] {
         color: #D84315 !important;
+        font-weight: bold;
     }
     div[data-testid="stMetricLabel"] {
         color: #5D4037 !important;
     }
     
-    /* 手機版日曆優化：強制橫向排列 */
+    /* [🔥手機版核心修正] 強制橫向排列，絕不堆疊 */
     @media (max-width: 768px) {
-        div[data-testid="stColumn"] {
-            width: auto !important;
-            flex: 1 1 auto !important;
-            min-width: 1px !important;
-            padding: 0 2px !important;
+        /* 強制所有橫向區塊保持「橫向」 */
+        div[data-testid="stHorizontalBlock"] {
+            flex-direction: row !important;
+            flex-wrap: nowrap !important;
         }
+        
+        /* 讓每個格子可以縮到非常小，不被內容撐開 */
+        div[data-testid="stColumn"] {
+            flex: 1 1 0px !important;
+            min-width: 0px !important;
+            width: auto !important;
+            padding: 0 1px !important; /* 極小間距 */
+        }
+        
+        /* 按鈕字體縮小，確保塞得進去 */
         .stButton button {
-            font-size: 12px !important;
+            font-size: 10px !important; 
             padding: 0px !important;
-            height: 35px !important;
+            min-height: 35px !important;
+            height: auto !important;
+            line-height: 1.2 !important;
         }
     }
 
-    /* 按鈕樣式 (圓形) */
+    /* 一般電腦版按鈕樣式 (圓形) */
     .stButton button {
         background-color: #FFECB3;
         color: #5D4037 !important;
@@ -62,13 +72,13 @@ st.markdown("""
         align-items: center;
         justify-content: center;
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        white-space: pre-wrap; /* 允許文字換行 */
     }
     .stButton button:hover {
         background-color: #FFD54F;
         border-color: #FFCA28;
     }
     
-    /* 圖片圓角 */
     img { border-radius: 15px; }
     </style>
 """, unsafe_allow_html=True)
@@ -113,7 +123,7 @@ if 'selected_date' not in st.session_state:
 
 st.title("🍰飲食日記🧋")
 
-# 1. 編輯區塊 (當選取日期時顯示)
+# 1. 編輯區塊
 if st.session_state.selected_date:
     sel_date = st.session_state.selected_date
     st.info(f"正在編輯：{sel_date.strftime('%Y/%m/%d')}")
@@ -123,6 +133,7 @@ if st.session_state.selected_date:
         if not df.empty:
             day_records = df[df['日期'].dt.date == sel_date.date()]
             for idx, row in day_records.iterrows():
+                # 這裡 columns(3) 會因為上面的 CSS 也被強制橫排，剛好符合需求
                 c1, c2, c3 = st.columns([3, 2, 1])
                 with c1: st.write(f"🍽️ {row['項目']}")
                 with c2: st.write(f"💰 {row['價格']}")
@@ -174,26 +185,30 @@ if not df.empty:
 # 顯示總金額
 st.metric("💰 本月總支出", f"${int(month_total)}")
 
-# 3. 日曆顯示 (使用月曆矩陣，確保手機排列整齊)
+# 3. 日曆顯示 (🔥嚴格確保每週一行)
 st.write("#### 📅 點擊日期來紀錄")
 
+# 這裡很重要：我們使用「一週一週」的方式來產生，配合 CSS 強制橫排
 month_weeks = calendar.monthcalendar(y, m)
 
 for week in month_weeks:
-    cols = st.columns(7)
+    # 每一週產生一個新的 7 欄區塊
+    # 因為 cols = st.columns(7) 是寫在迴圈裡，所以每週會換新的一行
+    cols = st.columns(7) 
+    
     for i, d in enumerate(week):
         with cols[i]:
             if d != 0:
                 spent = daily_sum.get(d, 0)
-                # 有花費顯示金額，沒有顯示日期
+                # 金額換行顯示
                 label = f"{d}\n${int(spent)}" if spent > 0 else f"{d}"
                 
-                # key 必須唯一，加上 y, m, d 組合
                 if st.button(label, key=f"cal_{y}_{m}_{d}"):
                     st.session_state.selected_date = datetime(y, m, d)
                     st.rerun()
             else:
-                st.write("") # 空白日期佔位
+                # 空白日期也要佔位，保持排版
+                st.write("") 
 
 st.divider()
 
