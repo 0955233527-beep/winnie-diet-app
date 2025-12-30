@@ -18,27 +18,20 @@ st.set_page_config(page_title="🍰飲食日記🧋", page_icon="🍯", layout="
 # --- 樣式設定 ---
 st.markdown("""
     <style>
-    /* 設定背景色 */
     .stApp { background-color: #FFFDF5; }
-    
-    /* 強制所有標題與文字變色 */
     h1, h2, h3, h4, .stMarkdown, p, span, div { 
         color: #5D4037 !important; 
     }
-    
-    /* 讓輸入框標題也變深色 */
     label {
         color: #5D4037 !important;
     }
-
-    /* 日曆按鈕樣式 */
     .stButton button {
         background-color: #FFECB3;
         color: #5D4037 !important;
         border: 2px solid #FFE082;
-        border-radius: 50%; /* 圓形 */
+        border-radius: 50%;
         width: 100%;
-        aspect-ratio: 1 / 1; /* 保持正圓 */
+        aspect-ratio: 1 / 1;
         font-weight: bold;
         padding: 0;
         margin: 0 auto;
@@ -50,13 +43,9 @@ st.markdown("""
         background-color: #FFD54F;
         border-color: #FFCA28;
     }
-
-    /* 針對手機優化：避免按鈕被拉伸 */
     div[data-testid="stColumn"] {
         text-align: center;
     }
-    
-    /* 圖片圓角 */
     img { border-radius: 15px; }
     </style>
 """, unsafe_allow_html=True)
@@ -101,7 +90,7 @@ if 'selected_date' not in st.session_state:
 
 st.title("🍰飲食日記🧋")
 
-# 1. 編輯區塊 (如果有選日期的話)
+# 1. 編輯區塊
 if st.session_state.selected_date:
     sel_date = st.session_state.selected_date
     st.info(f"正在編輯：{sel_date.strftime('%Y/%m/%d')}")
@@ -115,7 +104,6 @@ if st.session_state.selected_date:
                 with c1: st.write(f"🍽️ {row['項目']}")
                 with c2: st.write(f"💰 {row['價格']}")
                 with c3: 
-                    # 使用唯一的 key 防止重複錯誤
                     if st.button("刪", key=f"del_{idx}"):
                         delete_entry(idx)
                         st.rerun()
@@ -157,19 +145,15 @@ if not df.empty:
     month_data = df[(df['Y'] == y) & (df['M'] == m)]
     daily_sum = month_data.groupby(df['日期'].dt.day)['價格'].sum()
 
-# 3. 日曆顯示 (修正為7欄)
+# 3. 日曆顯示 (7欄)
 st.write("#### 📅 點擊日期來紀錄")
-# 改成 7 欄，符合一週七天
 cols = st.columns(7) 
 days = calendar.monthrange(y, m)[1]
 
 for d in range(1, days+1):
     spent = daily_sum.get(d, 0)
-    # 如果有花費，顯示金額；沒有則只顯示日期
     label = f"{d}\n${int(spent)}" if spent > 0 else f"{d}"
     
-    # 計算這個日期應該在星期幾 (0=週一, 6=週日) 來決定排版位置，或是直接依序排列
-    # 這裡採用簡單依序排列，每7個換一行
     with cols[(d-1)%7]:
         if st.button(label, key=f"cal_btn_{d}"):
             st.session_state.selected_date = datetime(y, m, d)
@@ -177,8 +161,9 @@ for d in range(1, days+1):
 
 st.divider()
 
-# 4. 補回相簿功能
+# 4. 相簿功能
 st.subheader("📸 飲食相簿")
 
+# 這裡就是容易出錯的地方，我已經確保縮排正確
 if not df.empty:
-    # 篩選出有圖片的
+    gallery_df = df[df['圖片路徑'].notna()]
