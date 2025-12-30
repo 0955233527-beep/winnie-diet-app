@@ -4,15 +4,19 @@ from datetime import datetime
 import calendar
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
+import os
 
 # --- 設定 ---
-# 這是你在 Google 試算表取的名稱，必須一模一樣
 SPREADSHEET_NAME = 'diet_data' 
+IMAGE_DIR = 'images' # 雖然暫時沒用圖片，先留著以免報錯
+
+if not os.path.exists(IMAGE_DIR):
+    os.makedirs(IMAGE_DIR)
 
 # --- 頁面設定 ---
 st.set_page_config(page_title="🍰飲食日記🧋", page_icon="🍯", layout="centered")
 
-# --- 樣式設定 (手機版優化) ---
+# --- 樣式設定 ---
 st.markdown("""
     <style>
     .stApp { background-color: #FFFDF5; }
@@ -37,45 +41,42 @@ st.markdown("""
 
 # --- Google Sheets 連線設定 ---
 def get_google_sheet():
-    # 從 Streamlit Secrets 讀取金鑰
-    scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-    creds_dict = dict(st.secrets["gcp_service_account"])
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-    client = gspread.authorize(creds)
-    
     try:
+        # 從 Streamlit Secrets 讀取金鑰
+        scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+        creds_dict = dict(st.secrets["gcp_service_account"])
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+        client = gspread.authorize(creds)
         sheet = client.open(SPREADSHEET_NAME).sheet1
         return sheet
-    except gspread.exceptions.SpreadsheetNotFound:
-        st.error(f"找不到名稱為 '{SPREADSHEET_NAME}' 的試算表，請確認 Google Drive 裡有這個檔案，且已共用給機器人。")
+    except Exception as e:
         return None
 
 # --- 功能函數 ---
 def load_data():
     sheet = get_google_sheet()
     if sheet:
-        data = sheet.get_all_records()
-        if data:
-            df = pd.DataFrame(data)
-            # 轉換欄位名稱 (如果試算表是用英文，這裡可以對應，目前假設試算表第一行是中文)
-            if '日期' in df.columns:
-                df['日期'] = pd.to_datetime(df['日期'], errors='coerce')
-            return df
-        else:
-            # 初始化標題
-            sheet.append_row(['日期', '項目', '價格'])
+        try:
+            data = sheet.get_all_records()
+            if data:
+                df = pd.DataFrame(data)
+                if '日期' in df.columns:
+                    df['日期'] = pd.to_datetime(df['日期'], errors='coerce')
+                return df
+            else:
+                return pd.DataFrame(columns=['日期', '項目', '價格'])
+        except:
+            return pd.DataFrame(columns=['日期', '項目', '價格'])
     return pd.DataFrame(columns=['日期', '項目', '價格'])
 
 def save_data_entry(date_obj, item, price):
     sheet = get_google_sheet()
     if sheet:
-        # 寫入 Google Sheet
         sheet.append_row([str(date_obj), item, price])
 
 def delete_entry(index):
     sheet = get_google_sheet()
     if sheet:
-        # Google Sheet 的行數從 1 開始，且第 1 行是標題，所以資料索引要 +2
         sheet.delete_rows(index + 2)
 
 # --- 主程式邏輯 ---
@@ -83,18 +84,24 @@ if 'selected_date' not in st.session_state:
     st.session_state.selected_date = None
 
 st.title("🍰飲食日記🧋 (雲端版)")
-# --- 診斷程式碼 (測試完後可以刪除) ---
-st.write("🔍 正在診斷連線...")
-try:
-    test_sheet = get_google_sheet()
-    if test_sheet:
-        st.success(f"✅ 成功連線到試算表！")
-        st.write("目前資料：", test_sheet.get_all_records())
-    else:
-        st.error("❌ 無法找到試算表，請檢查檔名是否為 'diet_data'，且機器人已加入共用。")
-except Exception as e:
-    st.error(f"❌ 連線發生錯誤 (請截圖給工程師)：{e}")
-# -----------------------------------
+
+# --- 🔍 連線診斷區 (測試用) ---
+with st.expander("🔧 連線狀態檢查 (如果沒資料請點開我)"):
+    try:
+        test_sheet = get_google_sheet()
+        if test_sheet:
+            st.success(f"✅ Google 試算表連線成功！檔名: {SPREADSHEET_NAME}")
+            records = test_sheet.get_all_records()
+            st.write(f"目前試算表內有 {len(records)} 筆資料")
+        else:
+            st.error("❌ 連線失敗！請檢查：")
+            st.markdown("1. Streamlit Secrets 設定是否正確？")
+            st.markdown(f"2. Google 試算表名稱是否為 `{SPREADSHEET_NAME}`？")
+            st.markdown("3. 是否已將機器人 Email 加入試算表共用？")
+    except Exception as e:
+        st.error(f"❌ 發生錯誤: {e}")
+# -----------------------------
+
 # 1. 編輯區塊
 if st.session_state.selected_date:
     sel_date = st.session_state.selected_date
@@ -104,7 +111,6 @@ if st.session_state.selected_date:
         df = load_data()
         if not df.empty:
             day_records = df[df['日期'].dt.date == sel_date.date()]
-            # 重新重置 index 以便正確刪除
             day_records = day_records.reset_index() 
             
             for i, row in day_records.iterrows():
@@ -112,7 +118,6 @@ if st.session_state.selected_date:
                 with c1: st.write(f"🍽️ {row['項目']}")
                 with c2: st.write(f"💰 {row['價格']}")
                 with c3: 
-                    # 傳入原本 DataFrame 的真實 index
                     original_idx = row['index']
                     if st.button("刪", key=f"del_{original_idx}"):
                         delete_entry(original_idx)
@@ -175,4 +180,3 @@ for week in month_weeks:
                     st.rerun()
             else:
                 st.write("")
-
