@@ -155,4 +155,6 @@ for d in range(1, days+1):
     label = f"{d}\n\n${int(spent)}" if spent > 0 else f"{d}"
     
     with cols[(d-1)%4]:
-        if st.button(label, key=f"b_{
+# 如果你的迴圈變數是 i
+if st.button(label, key=f"b_{i}"):
+
