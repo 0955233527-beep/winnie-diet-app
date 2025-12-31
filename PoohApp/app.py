@@ -16,27 +16,27 @@ if not os.path.exists(IMAGE_DIR):
 # --- 頁面設定 ---
 st.set_page_config(page_title="🍰飲食日記🧋", page_icon="🍯", layout="centered")
 
-# --- 樣式設定 (手機排版終極修復) ---
+# --- 樣式設定 (優化日曆數字) ---
 st.markdown("""
     <style>
     .stApp { background-color: #FFFDF5; }
     h1, h2, h3, h4, .stMarkdown, p, span, div, label { color: #5D4037 !important; }
     div[data-testid="stMetricValue"] { color: #D84315 !important; font-weight: bold; }
     
-    /* 1. 強制橫向排列，防止變直 */
-    [data-testid="stHorizontalBlock"] { 
-        display: flex !important; 
-        flex-direction: row !important; 
-        flex-wrap: nowrap !important; 
+    /* 手機版橫向排列 */
+    [data-testid="stHorizontalBlock"] {
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
     }
     
-    [data-testid="stColumn"] { 
-        flex: 1 1 0px !important; 
-        min-width: 0px !important; 
-        padding: 0 1px !important; 
+    [data-testid="stColumn"] {
+        flex: 1 1 0px !important;
+        min-width: 0px !important;
+        padding: 0 1px !important;
     }
 
-    /* 2. 按鈕美化：允許換行、字體縮小 */
+    /* 🔥 按鈕樣式優化：讓數字正常顯示 */
     .stButton button {
         background-color: #FFECB3; 
         color: #5D4037 !important; 
@@ -45,15 +45,16 @@ st.markdown("""
         width: 100%; 
         aspect-ratio: 1/1; 
         font-weight: bold;
-        padding: 0px !important; /* 減少內邊距 */
-        font-size: 10px !important; /* 字體改小一點點 */
-        line-height: 1.2 !important;
+        padding: 2px !important; 
+        font-size: 11px !important;
+        line-height: 1.1 !important; /* 縮小行高，讓日期與金額靠攏 */
         display: flex; 
         align-items: center; 
         justify-content: center;
-        white-space: pre-line !important; /* 關鍵：讓日期跟金額自動分兩行 */
+        white-space: pre-line !important; /* 允許 \n 換行 */
     }
     .stButton button:hover { background-color: #FFD54F; }
+    
     img { border-radius: 15px; }
     </style>
 """, unsafe_allow_html=True)
@@ -62,16 +63,19 @@ st.markdown("""
 def get_google_sheet():
     try:
         scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-        # 雙重保險：優先讀 Secrets (雲端)，沒有則讀本地檔案 (開發環境)
+        # 優先讀取雲端 Secrets，若無則讀取本地 (為了開發環境)
         if "gcp_service_account" in st.secrets:
             creds_dict = dict(st.secrets["gcp_service_account"])
-            creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-            client = gspread.authorize(creds)
-            return client.open(SPREADSHEET_NAME).sheet1
         else:
+            st.error("❌ 找不到金鑰設定")
             return None
+            
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+        client = gspread.authorize(creds)
+        sheet = client.open(SPREADSHEET_NAME).sheet1
+        return sheet
     except Exception as e:
-        st.error(f"連線偵測中: {e}")
+        st.error(f"⚠️ 連線錯誤：{e}")
         return None
 
 # --- 功能函數 ---
@@ -131,7 +135,7 @@ if st.session_state.selected_date:
             if st.form_submit_button("✅ 儲存"):
                 if item:
                     save_data_entry(sel_date, item, price, file)
-                    st.success("成功！")
+                    st.success("儲存成功！")
                     st.rerun()
     if st.button("❌ 關閉編輯"):
         st.session_state.selected_date = None
@@ -148,7 +152,7 @@ with col_m: m = st.selectbox("月份", range(1, 13), index=now.month-1)
 df = load_data()
 daily_sum = pd.Series(dtype='float64')
 month_total = 0
-if not df.empty:
+if not df.empty and '價格' in df.columns:
     df['Y'] = df['日期'].dt.year
     df['M'] = df['日期'].dt.month
     month_data = df[(df['Y'] == y) & (df['M'] == m)]
@@ -166,9 +170,9 @@ for week in weeks:
         with cols[i]:
             if d != 0:
                 spent = daily_sum.get(d, 0)
-                # 這裡的 \n 會配合 CSS 讓它自動換行
+                # 使用 \n 換行，CSS 已經設定好允許換行
                 label = f"{d}\n${int(spent)}" if spent > 0 else f"{d}"
-                if st.button(label, key=f"btn_{y}_{m}_{d}"):
+                if st.button(label, key=f"cal_{y}_{m}_{d}"):
                     st.session_state.selected_date = datetime(y, m, d)
                     st.rerun()
 
